@@ -7,6 +7,11 @@
 # Usage:
 #   ./deploy_ova.sh --host [ESXI_HOST] --user [ESXI_USER] --password [ESXI_PASSWORD] --ova [OVA_FILE] --vm_name [VM_NAME] \
 #                   --ip [IP_ADDRESS/NETMASK] --gw [DEFAILT_GW_IP]
+# 
+# Default values:
+#   VM_NAME   - OVA filename without extention
+#   ESXI_USER - root
+#   IP_ADDRESS-"192.168.1.100/24"
 #
 # Example:
 #   ./deploy_ova.sh --host 192.168.1.100 --user root --password mypassword --ova myvm.ova \
@@ -29,8 +34,8 @@ ESXI_USER="root"
 ESXI_PASSWORD=""
 OVA_FILE=""
 # Default values:
-VM_NAME="FSec"
-IP_ADDRESS="192.168.1.100"
+VM_NAME=""
+IP_ADDRESS="192.168.1.100/24"
 DEFAILT_GW_IP=""
 
 # Parse named parameters
@@ -50,6 +55,8 @@ while [ $# -gt 0 ]; do
       ;;
     --ova)
       OVA_FILE="$2"
+      VM_NAME="$(basename "$OVA_FILE" | cut -d. -f1)"
+      # echo "VM_NAME: $VM_NAME"
       shift 2
       ;;
     --vm_name)
@@ -81,7 +88,56 @@ if [ -z "$ESXI_HOST" ] || [ -z "$ESXI_PASSWORD" ] || [ -z "$OVA_FILE" ]; then
   exit 1
 fi
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Start deploying the FlowSec VM with the next parameters:
+if [ ! -d "config" ]; then
+    echo "Directory config does not exist. Creating..."
+    mkdir -p "config"
+else
+    echo "Directory config exists."
+fi
+
+if [ ! -d "image" ]; then
+    echo "Directory image does not exist. Creating..."
+    mkdir -p "image"
+else
+    echo "Directory image exists."
+fi
+
+if [ ! -f "config/meta-data" ]; then
+    cat > "config/meta-data" <<EOF
+instance-id: flowsec-local
+EOF
+fi
+
+if [ ! -f "config/user-data" ]; then
+    cat > "config/user-data" <<EOF
+#cloud-config
+runcmd:
+  - date > /tmp/cloud-config.txt
+
+#cloud-init
+bootcmd:
+  - echo "every_boot_run on " > /tmp/cidata.txt
+  - mount /dev/sr0 /mnt && cp /mnt/network.conf /etc/netplan/00-installer-config.yaml && umount /mnt
+  - date >> /tmp/cidata.txt
+EOF
+fi
+
+if [ ! -f "config/network.conf" ]; then
+    cat > "config/network.conf" <<EOF
+network:
+  ethernets:
+    ens160:
+      addresses: [172.20.1.62/24]
+      gateway4: 172.20.1.254
+      nameservers:
+        addresses:
+        - 8.8.8.8
+        search: []
+  version: 2
+EOF
+fi
+
+echo $(date +%Y-%m-%d-%H:%M:%S) Start deploying the VM with the next parameters:
 echo ESXi host: $ESXI_HOST
 echo ESXi user: $ESXI_USER
 # echo ESXi pass: $ESXI_PASSWORD
@@ -111,7 +167,7 @@ sed -i "s|^      gateway4:.*|      gateway4: $DEFAILT_GW_IP|" config/network.con
 echo " Done!"
 
 echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new ISO image with a new configuration..
-genisoimage -output image/Stats-N1-file1.iso -volid cidata -joliet -rock -graft-points user-data=cloud-init/user-data meta-data=cloud-init/meta-data network.conf=config/network.conf
+genisoimage -output image/Stats-N1-file1.iso -volid cidata -joliet -rock -graft-points user-data=config/user-data meta-data=config/meta-data network.conf=config/network.conf
 echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new ISO image Done!
 
 echo -n $(date +%Y-%m-%d-%H:%M:%S) Fixing the OVF..
@@ -139,5 +195,5 @@ cd -
 echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new OVA image Done!
 
 echo $(date +%Y-%m-%d-%H:%M:%S) Starting the new VM deploy..
-ovftool/ovftool --noSSLVerify --name=$VM_NAME --diskMode=thin --powerOn --overwrite image/image.ova "vi://$ESXI_USER:$ESXI_PASSWORD@$ESXI_HOST"
+ovftool/ovftool --noSSLVerify --name=$VM_NAME --diskMode=thin --powerOn image/image.ova "vi://$ESXI_USER:$ESXI_PASSWORD@$ESXI_HOST"
 echo $(date +%Y-%m-%d-%H:%M:%S) All tasks are done!
