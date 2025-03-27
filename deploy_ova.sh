@@ -5,10 +5,10 @@
 # setting up basic configurations such as VM name, network, and default gateway.
 #
 # Usage:
-#   ./deploy_ova.sh --host [ESXI_HOST] --user [ESXI_USER] --password [ESXI_PASSWORD] --ova [OVA_FILE] --vm_name [VM_NAME] \
+#   ./deploy_ova.sh --esxi_host [ESXI_HOST] --esxi_user [ESXI_USER] --esxi_password [ESXI_PASSWORD] --ova [OVA_FILE] --vm_name [VM_NAME] \
 #                   --ip [IP_ADDRESS/NETMASK] --gw [DEFAILT_GW_IP]
 #
-# If --password option is not defined, the password is prompted on the command line.
+# If --esxi_password option is not defined, the password is prompted on the command line.
 # 
 # Default values:
 #   VM_NAME   - OVA filename without extention
@@ -16,16 +16,16 @@
 #   IP_ADDRESS-"192.168.1.100/24"
 #
 # Example:
-#   ./deploy_ova.sh --host 192.168.1.100 --user root --password mypassword --ova myvm.ova \
+#   ./deploy_ova.sh --esxi_host 192.168.1.100 --esxi_user root --esxi_password mypassword --ova myvm.ova \
 #   --ip 172.20.20.18/24 --gw 172.20.20.1
 #
 # Requirements:
-#   - ovftool must be installed and available in the system's PATH.
+#   - ovftool must be installed and available in the ./ovftool/ PATH.
 #   - genisoimage must be installed and available in the system's PATH.
 #   - ESXi host must be accessible and credentials must be valid.
 #
 # Author: Denis Chertkov, denis@chertkov.info
-# version 1.02
+# version 1.04
 # Date: [2025-03-27]
 #######################################################################################################
 
@@ -33,13 +33,13 @@
 set -e
 
 ESXI_HOST=""
-ESXI_USER="root"
 ESXI_PASSWORD=""
 OVA_FILE=""
-# Default values:
 VM_NAME=""
 IP_ADDRESS="192.168.1.100/24"
 DEFAILT_GW_IP=""
+# Default values:
+ESXI_USER="root"
 LOGFILE="output.log"
 
 echo $(date +%Y-%m-%d-%H:%M:%S) The script started.. > $LOGFILE
@@ -47,22 +47,21 @@ echo $(date +%Y-%m-%d-%H:%M:%S) The script started.. > $LOGFILE
 # Parse named parameters
 while [ $# -gt 0 ]; do
   case "$1" in
-    --host)
+    --esxi_host)
       ESXI_HOST="$2"
       shift 2
       ;;
-    --user)
+    --esxi_user)
       ESXI_USER="$2"
       shift 2
       ;;
-    --password)
+    --esxi_password)
       ESXI_PASSWORD="$2"
       shift 2
       ;;
     --ova)
       OVA_FILE="$2"
       VM_NAME="$(basename "$OVA_FILE" | cut -d. -f1)"
-      # echo "VM_NAME: $VM_NAME"
       shift 2
       ;;
     --vm_name)
@@ -78,7 +77,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --help)
-      echo "Usage: $0 --host [ESXI_HOST] --user [ESXI_USER] --password [ESXI_PASSWORD] --ova [OVA_FILE] --vm_name [VM_NAME] --ip [IP_ADDRESS/SUBNET] --gw [DEFAILT_GW_IP]"
+      echo "Usage: $0 --esxi_host [ESXI_HOST] --esxi_user [ESXI_USER] --esxi_password [ESXI_PASSWORD] --ova [OVA_FILE] --vm_name [VM_NAME] --ip [IP_ADDRESS/SUBNET] --gw [DEFAILT_GW_IP]"
       exit 0
       ;;
     *)
@@ -90,7 +89,7 @@ done
 
 # Check the mandatory options
 if [ -z "$ESXI_HOST" ] || [ -z "$OVA_FILE" ]; then
-  echo "Error: --host, --password and --ova parameters are required!"
+  echo "Error: --esxi_host and --ova parameters are required!"
   exit 1
 fi
 
