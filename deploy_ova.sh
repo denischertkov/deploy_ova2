@@ -7,6 +7,8 @@
 # Usage:
 #   ./deploy_ova.sh --host [ESXI_HOST] --user [ESXI_USER] --password [ESXI_PASSWORD] --ova [OVA_FILE] --vm_name [VM_NAME] \
 #                   --ip [IP_ADDRESS/NETMASK] --gw [DEFAILT_GW_IP]
+#
+# If --password option is not defined, the password is prompted on the command line.
 # 
 # Default values:
 #   VM_NAME   - OVA filename without extention
@@ -23,7 +25,8 @@
 #   - ESXi host must be accessible and credentials must be valid.
 #
 # Author: Denis Chertkov, denis@chertkov.info
-# Date: [2025-03-26]
+# version 1.02
+# Date: [2025-03-27]
 #######################################################################################################
 
 # Exit script on any error
@@ -83,7 +86,7 @@ while [ $# -gt 0 ]; do
 done
 
 # Check the mandatory options
-if [ -z "$ESXI_HOST" ] || [ -z "$ESXI_PASSWORD" ] || [ -z "$OVA_FILE" ]; then
+if [ -z "$ESXI_HOST" ] || [ -z "$OVA_FILE" ]; then
   echo "Error: --host, --password and --ova parameters are required!"
   exit 1
 fi
@@ -116,8 +119,9 @@ runcmd:
 
 #cloud-init
 bootcmd:
-  - echo "every_boot_run on " > /tmp/cidata.txt
+  - echo "Hello, world!" > /tmp/cidata.txt
   - mount /dev/sr0 /mnt && cp /mnt/network.conf /etc/netplan/00-installer-config.yaml && umount /mnt
+  - netplan apply
   - date >> /tmp/cidata.txt
 EOF
 fi

@@ -1,3 +1,7 @@
 image/
 ovftool/
 make_ova.sh
+cloud-init/
+config/
+temp/
+output.log
