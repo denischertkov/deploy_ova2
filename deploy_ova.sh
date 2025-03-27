@@ -40,6 +40,9 @@ OVA_FILE=""
 VM_NAME=""
 IP_ADDRESS="192.168.1.100/24"
 DEFAILT_GW_IP=""
+LOGFILE="output.log"
+
+echo $(date +%Y-%m-%d-%H:%M:%S) The script started.. > $LOGFILE
 
 # Parse named parameters
 while [ $# -gt 0 ]; do
@@ -92,27 +95,29 @@ if [ -z "$ESXI_HOST" ] || [ -z "$OVA_FILE" ]; then
 fi
 
 if [ ! -d "config" ]; then
-    echo "Directory config does not exist. Creating..."
+    echo -n $(date +%Y-%m-%d-%H:%M:%S) "Directory config does not exist. Creating.. " >> $LOGFILE
     mkdir -p "config"
+    echo " Done!" >> $LOGFILE
 else
-    echo "Directory config exists."
+    echo $(date +%Y-%m-%d-%H:%M:%S) "Directory config exists." >> $LOGFILE
 fi
 
 if [ ! -d "image" ]; then
-    echo "Directory image does not exist. Creating..."
+    echo -n $(date +%Y-%m-%d-%H:%M:%S) "Directory image does not exist. Creating.. " >> $LOGFILE
     mkdir -p "image"
+    echo " Done!" >> $LOGFILE
 else
-    echo "Directory image exists."
+    echo $(date +%Y-%m-%d-%H:%M:%S) "Directory image exists." >> $LOGFILE
 fi
 
-if [ ! -f "config/meta-data" ]; then
-    cat > "config/meta-data" <<EOF
+# if [ ! -f "config/meta-data" ]; then
+cat > "config/meta-data" <<EOF
 instance-id: flowsec-local
 EOF
-fi
+# fi
 
-if [ ! -f "config/user-data" ]; then
-    cat > "config/user-data" <<EOF
+# if [ ! -f "config/user-data" ]; then
+cat > "config/user-data" <<EOF
 #cloud-config
 runcmd:
   - date > /tmp/cloud-config.txt
@@ -124,7 +129,7 @@ bootcmd:
   - netplan apply
   - date >> /tmp/cidata.txt
 EOF
-fi
+# fi
 
 if [ ! -f "config/network.conf" ]; then
     cat > "config/network.conf" <<EOF
@@ -141,10 +146,9 @@ network:
 EOF
 fi
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Start deploying the VM with the next parameters:
+echo $(date +%Y-%m-%d-%H:%M:%S) Start deploying the VM with the next parameters: | tee -a $LOGFILE
 echo ESXi host: $ESXI_HOST
 echo ESXi user: $ESXI_USER
-# echo ESXi pass: $ESXI_PASSWORD
 echo ova: $OVA_FILE
 echo VM name: $VM_NAME
 echo IP: $IP_ADDRESS
@@ -157,47 +161,46 @@ echo
 #     exit 1
 # fi
 
-echo -n $(date +%Y-%m-%d-%H:%M:%S) Prepearing the directory for the new image..
+echo -n $(date +%Y-%m-%d-%H:%M:%S) Prepearing the directory for the new image.. >> $LOGFILE
 rm -f image/*.*
-echo " Done!"
+echo " Done!" >> $LOGFILE
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Extracting disk images..
-tar xvf $OVA_FILE -C image/
-echo $(date +%Y-%m-%d-%H:%M:%S) Extracting disk Done!
+echo $(date +%Y-%m-%d-%H:%M:%S) Extracting disk images.. >> $LOGFILE
+tar xvf $OVA_FILE -C image/ >> $LOGFILE
+echo $(date +%Y-%m-%d-%H:%M:%S) Extracting disk Done! >> $LOGFILE
 
-echo -n $(date +%Y-%m-%d-%H:%M:%S) Apply new VM configuration...
+echo -n $(date +%Y-%m-%d-%H:%M:%S) Apply new VM configuration... >> $LOGFILE
 sed -i "s|^      addresses:.*|      addresses: [$IP_ADDRESS]|" config/network.conf 
 sed -i "s|^      gateway4:.*|      gateway4: $DEFAILT_GW_IP|" config/network.conf 
-echo " Done!"
+echo " Done!" >> $LOGFILE
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new ISO image with a new configuration..
-genisoimage -output image/Stats-N1-file1.iso -volid cidata -joliet -rock -graft-points user-data=config/user-data meta-data=config/meta-data network.conf=config/network.conf
-echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new ISO image Done!
+echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new ISO image with a new configuration.. >> $LOGFILE
+genisoimage -input-charset utf-8 -log-file genisoimage.log -output image/Stats-N1-file1.iso -volid cidata -joliet -rock -graft-points user-data=config/user-data meta-data=config/meta-data network.conf=config/network.conf
+cat genisoimage.log >> $LOGFILE
+rm -f genisoimage.log
+echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new ISO image Done! >> $LOGFILE
 
-echo -n $(date +%Y-%m-%d-%H:%M:%S) Fixing the OVF..
+echo -n $(date +%Y-%m-%d-%H:%M:%S) Fixing the OVF.. >> $LOGFILE
 len=$(ls -l image/Stats-N1-file1.iso |awk '{print $5}')
-# echo $len
 news='    <File ovf:href="Stats-N1-file1.iso" ovf:id="file1" ovf:size="'$len'"/>'
 sed -i "s|^    <File ovf:href=\"Stats-N1-file1.iso.*|$news|" image/Stats-N1.ovf
-echo " Done!"
+echo " Done!" >> $LOGFILE
 
-echo -n $(date +%Y-%m-%d-%H:%M:%S) Fixing the manifest..
-# sed -i "/^SHA256(Stats-N1-file1.iso.*/d" image/Stats-N1.mf
-# isohash=$(sha256sum image/Stats-N1-file1.iso|awk '{print $1}')
-# echo "SHA256(Stats-N1-file1.iso)= "$isohash >> image/Stats-N1.mf
-# isohashstr="SHA256(Stats-N1-file1.iso)= "$isohash
+echo -n $(date +%Y-%m-%d-%H:%M:%S) Fixing the manifest.. >> $LOGFILE
 isohashstr="SHA256(Stats-N1-file1.iso)= "$(sha256sum image/Stats-N1-file1.iso|awk '{print $1}')
 sed -i "s/^SHA256(Stats-N1-file1.iso.*/$isohashstr/" image/Stats-N1.mf
 mfhashstr="SHA256(Stats-N1.ovf)= "$(sha256sum image/Stats-N1.ovf|awk '{print $1}')
 sed -i "s/^SHA256(Stats-N1.ovf.*/$mfhashstr/" image/Stats-N1.mf
-echo " Done!"
+echo " Done!" >> $LOGFILE
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new OVA image..
+echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new OVA image.. >> $LOGFILE
 cd image
-tar cvf image.ova Stats-N1.ovf Stats-N1.mf Stats-N1-file1.iso Stats-N1-disk1.vmdk Stats-N1-file2.nvram
-cd -
-echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new OVA image Done!
+tar cvf image.ova Stats-N1.ovf Stats-N1.mf Stats-N1-file1.iso Stats-N1-disk1.vmdk Stats-N1-file2.nvram  >> ../$LOGFILE
+cd - > /dev/null
+echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new OVA image Done! >> $LOGFILE
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Starting the new VM deploy..
-ovftool/ovftool --noSSLVerify --name=$VM_NAME --diskMode=thin --powerOn image/image.ova "vi://$ESXI_USER:$ESXI_PASSWORD@$ESXI_HOST"
-echo $(date +%Y-%m-%d-%H:%M:%S) All tasks are done!
+echo $(date +%Y-%m-%d-%H:%M:%S) Starting the new VM deploy.. >> $LOGFILE
+ovftool/ovftool --noSSLVerify --name=$VM_NAME --diskMode=thin --powerOn image/image.ova "vi://$ESXI_USER:$ESXI_PASSWORD@$ESXI_HOST" 2>&1 | tee -a $LOGFILE
+# Log cleanup from progress lines
+sed -i '/ progress: /d' $LOGFILE
+echo $(date +%Y-%m-%d-%H:%M:%S) All tasks are done! | tee -a $LOGFILE
