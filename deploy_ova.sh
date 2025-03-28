@@ -5,10 +5,10 @@
 # setting up basic configurations such as VM name, network, and default gateway.
 #
 # Usage:
-#   ./deploy_ova.sh --esxi_host [ESXI_HOST] --esxi_user [ESXI_USER] --esxi_password [ESXI_PASSWORD] --ova [OVA_FILE] --vm_name [VM_NAME] \
-#                   --ip [IP_ADDRESS/NETMASK] --gw [DEFAILT_GW_IP]
+#   ./deploy_ova.sh --esxi_host [ESXI_HOST] --esxi_user [ESXI_USER] --esxi_password [ESXI_PASSWORD] --ova [OVA_FILE] \
+#                   --vm_name [VM_NAME] --ip [IP_ADDRESS/NETMASK] --gw [DEFAILT_GW_IP]
 #
-# If --esxi_password option is not defined, the password is prompted on the command line.
+# If --esxi_password option is not defined on the comand line, the password is prompted.
 # 
 # Default values:
 #   VM_NAME   - OVA filename without extention
@@ -21,12 +21,12 @@
 #
 # Requirements:
 #   - ovftool must be installed and available in the ./ovftool/ PATH.
-#   - genisoimage must be installed and available in the system's PATH.
+#   - tar, sha256sum and genisoimage must be installed and available in the system's PATH.
 #   - ESXi host must be accessible and credentials must be valid.
 #
 # Author: Denis Chertkov, denis@chertkov.info
-# version 1.04
-# Date: [2025-03-27]
+# version 1.05
+# Date: [2025-03-28]
 #######################################################################################################
 
 # Exit script on any error
@@ -42,7 +42,36 @@ DEFAILT_GW_IP=""
 ESXI_USER="root"
 LOGFILE="output.log"
 
-echo $(date +%Y-%m-%d-%H:%M:%S) The script started.. > $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) The script cersion 1.05 is started. > $LOGFILE
+
+
+if ! command -v tar &> /dev/null; then
+    echo $(date +%Y-%m-%d_%H:%M:%S) "tar is not installed. . Please install it and try again." | tee -a $LOGFILE
+    exit 1
+else
+    echo $(date +%Y-%m-%d_%H:%M:%S) "ovftool is installed." >> $LOGFILE
+fi
+
+if ! command -v genisoimage &> /dev/null; then
+    echo $(date +%Y-%m-%d_%H:%M:%S) "genisoimage is not installed. . Please install it and try again." | tee -a $LOGFILE
+    exit 1
+else
+    echo $(date +%Y-%m-%d_%H:%M:%S) "genisoimage is installed." >> $LOGFILE
+fi
+
+if ! command -v sha256sum &> /dev/null; then
+    echo $(date +%Y-%m-%d_%H:%M:%S) "sha256sum is not installed. . Please install it and try again." | tee -a $LOGFILE
+    exit 1
+else
+    echo $(date +%Y-%m-%d_%H:%M:%S) "sha256sum is installed." >> $LOGFILE
+fi
+
+if [[ -s "ovftool/ovftool" ]]; then
+    echo $(date +%Y-%m-%d_%H:%M:%S) "ovftool is installed." >> $LOGFILE
+else
+    echo $(date +%Y-%m-%d_%H:%M:%S) "ovftool is not installed. . Please install it and try again." | tee -a $LOGFILE
+    exit 1
+fi
 
 # Parse named parameters
 while [ $# -gt 0 ]; do
@@ -88,34 +117,31 @@ while [ $# -gt 0 ]; do
 done
 
 # Check the mandatory options
-if [ -z "$ESXI_HOST" ] || [ -z "$OVA_FILE" ]; then
-  echo "Error: --esxi_host and --ova parameters are required!"
+if [ -z "$ESXI_HOST" ] || [ -z "$OVA_FILE" ] || [ -z "$DEFAILT_GW_IP" ] || [ -z "$IP_ADDRESS" ]; then
+  echo "Error: --esxi_host, --ip, --gw and --ova parameters are required!"
   exit 1
 fi
 
 if [ ! -d "config" ]; then
-    echo -n $(date +%Y-%m-%d-%H:%M:%S) "Directory config does not exist. Creating.. " >> $LOGFILE
+    echo -n $(date +%Y-%m-%d_%H:%M:%S) "Directory config does not exist. Creating.. " >> $LOGFILE
     mkdir -p "config"
     echo " Done!" >> $LOGFILE
 else
-    echo $(date +%Y-%m-%d-%H:%M:%S) "Directory config exists." >> $LOGFILE
+    echo $(date +%Y-%m-%d_%H:%M:%S) "Directory config exists." >> $LOGFILE
 fi
 
 if [ ! -d "image" ]; then
-    echo -n $(date +%Y-%m-%d-%H:%M:%S) "Directory image does not exist. Creating.. " >> $LOGFILE
+    echo -n $(date +%Y-%m-%d_%H:%M:%S) "Directory image does not exist. Creating.. " >> $LOGFILE
     mkdir -p "image"
     echo " Done!" >> $LOGFILE
 else
-    echo $(date +%Y-%m-%d-%H:%M:%S) "Directory image exists." >> $LOGFILE
+    echo $(date +%Y-%m-%d_%H:%M:%S) "Directory image exists." >> $LOGFILE
 fi
 
-# if [ ! -f "config/meta-data" ]; then
 cat > "config/meta-data" <<EOF
 instance-id: flowsec-local
 EOF
-# fi
 
-# if [ ! -f "config/user-data" ]; then
 cat > "config/user-data" <<EOF
 #cloud-config
 runcmd:
@@ -128,10 +154,8 @@ bootcmd:
   - netplan apply
   - date >> /tmp/cidata.txt
 EOF
-# fi
 
-if [ ! -f "config/network.conf" ]; then
-    cat > "config/network.conf" <<EOF
+cat > "config/network.conf" <<EOF
 network:
   ethernets:
     ens160:
@@ -143,9 +167,8 @@ network:
         search: []
   version: 2
 EOF
-fi
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Start deploying the VM with the next parameters: | tee -a $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) Start deploying the VM with the next parameters: | tee -a $LOGFILE
 echo ESXi host: $ESXI_HOST
 echo ESXi user: $ESXI_USER
 echo ova: $OVA_FILE
@@ -154,52 +177,46 @@ echo IP: $IP_ADDRESS
 echo GW: $DEFAILT_GW_IP
 echo
 
-# Check if ovftool is installed
-# if ! command -v ovftool/ovftool &> /dev/null; then
-#     echo "Error: ovftool is not installed. Please install it and try again."
-#     exit 1
-# fi
-
-echo -n $(date +%Y-%m-%d-%H:%M:%S) Prepearing the directory for the new image.. >> $LOGFILE
+echo -n $(date +%Y-%m-%d_%H:%M:%S) Prepearing the directory for the new image.. >> $LOGFILE
 rm -f image/*.*
 echo " Done!" >> $LOGFILE
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Extracting disk images.. >> $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) Extracting disk images.. >> $LOGFILE
 tar xvf $OVA_FILE -C image/ >> $LOGFILE
-echo $(date +%Y-%m-%d-%H:%M:%S) Extracting disk Done! >> $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) Extracting disk Done! >> $LOGFILE
 
-echo -n $(date +%Y-%m-%d-%H:%M:%S) Apply new VM configuration... >> $LOGFILE
+echo -n $(date +%Y-%m-%d_%H:%M:%S) Apply new VM configuration... >> $LOGFILE
 sed -i "s|^      addresses:.*|      addresses: [$IP_ADDRESS]|" config/network.conf 
 sed -i "s|^      gateway4:.*|      gateway4: $DEFAILT_GW_IP|" config/network.conf 
 echo " Done!" >> $LOGFILE
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new ISO image with a new configuration.. >> $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) Creating the new ISO image with a new configuration.. >> $LOGFILE
 genisoimage -input-charset utf-8 -log-file genisoimage.log -output image/Stats-N1-file1.iso -volid cidata -joliet -rock -graft-points user-data=config/user-data meta-data=config/meta-data network.conf=config/network.conf
 cat genisoimage.log >> $LOGFILE
 rm -f genisoimage.log
-echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new ISO image Done! >> $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) Creating the new ISO image Done! >> $LOGFILE
 
-echo -n $(date +%Y-%m-%d-%H:%M:%S) Fixing the OVF.. >> $LOGFILE
+echo -n $(date +%Y-%m-%d_%H:%M:%S) Fixing the OVF.. >> $LOGFILE
 len=$(ls -l image/Stats-N1-file1.iso |awk '{print $5}')
 news='    <File ovf:href="Stats-N1-file1.iso" ovf:id="file1" ovf:size="'$len'"/>'
 sed -i "s|^    <File ovf:href=\"Stats-N1-file1.iso.*|$news|" image/Stats-N1.ovf
 echo " Done!" >> $LOGFILE
 
-echo -n $(date +%Y-%m-%d-%H:%M:%S) Fixing the manifest.. >> $LOGFILE
+echo -n $(date +%Y-%m-%d_%H:%M:%S) Fixing the manifest.. >> $LOGFILE
 isohashstr="SHA256(Stats-N1-file1.iso)= "$(sha256sum image/Stats-N1-file1.iso|awk '{print $1}')
 sed -i "s/^SHA256(Stats-N1-file1.iso.*/$isohashstr/" image/Stats-N1.mf
 mfhashstr="SHA256(Stats-N1.ovf)= "$(sha256sum image/Stats-N1.ovf|awk '{print $1}')
 sed -i "s/^SHA256(Stats-N1.ovf.*/$mfhashstr/" image/Stats-N1.mf
 echo " Done!" >> $LOGFILE
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new OVA image.. >> $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) Creating the new OVA image.. >> $LOGFILE
 cd image
 tar cvf image.ova Stats-N1.ovf Stats-N1.mf Stats-N1-file1.iso Stats-N1-disk1.vmdk Stats-N1-file2.nvram  >> ../$LOGFILE
 cd - > /dev/null
-echo $(date +%Y-%m-%d-%H:%M:%S) Creating the new OVA image Done! >> $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) Creating the new OVA image Done! >> $LOGFILE
 
-echo $(date +%Y-%m-%d-%H:%M:%S) Starting the new VM deploy.. >> $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) Starting the new VM deploy.. >> $LOGFILE
 ovftool/ovftool --noSSLVerify --name=$VM_NAME --diskMode=thin --powerOn image/image.ova "vi://$ESXI_USER:$ESXI_PASSWORD@$ESXI_HOST" 2>&1 | tee -a $LOGFILE
 # Log cleanup from progress lines
 sed -i '/ progress: /d' $LOGFILE
-echo $(date +%Y-%m-%d-%H:%M:%S) All tasks are done! | tee -a $LOGFILE
+echo $(date +%Y-%m-%d_%H:%M:%S) All tasks are done! | tee -a $LOGFILE
